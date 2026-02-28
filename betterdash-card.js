@@ -652,6 +652,41 @@ const EDITOR_STYLES = `
     color: var(--bd-primary);
   }
 
+  .server-select-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+  }
+  .server-select-row select {
+    flex: 1;
+  }
+  .icon-btn {
+    width: 34px;
+    height: 34px;
+    border: 1px solid var(--bd-border);
+    border-radius: 6px;
+    background: var(--bd-card-bg);
+    color: var(--bd-text);
+    cursor: pointer;
+    font-size: 1.2em;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+    padding: 0;
+    font-family: inherit;
+    line-height: 1;
+  }
+  .icon-btn:hover {
+    border-color: var(--bd-primary);
+    color: var(--bd-primary);
+  }
+  .icon-btn.danger:hover {
+    border-color: #f44336;
+    color: #f44336;
+  }
+
   .select-all-row {
     display: flex;
     align-items: center;
@@ -735,6 +770,44 @@ class BetterDashAPI {
   }
 }
 
+// ─── Server Registry (localStorage) ──────────────────────────────────────────
+
+const BD_SERVERS_KEY = 'betterdash_servers';
+
+function _loadServers() {
+  try {
+    // Migrate from old single-server format
+    const oldData = localStorage.getItem('betterdash_server');
+    const newData = localStorage.getItem(BD_SERVERS_KEY);
+    if (oldData && !newData) {
+      const old = JSON.parse(oldData);
+      if (old.server_url) {
+        const migrated = [{
+          id: 'srv_' + Date.now().toString(36),
+          name: 'BetterDash Server',
+          server_url: old.server_url,
+          api_key: old.api_key || '',
+          poll_interval: old.poll_interval || 30,
+        }];
+        localStorage.setItem(BD_SERVERS_KEY, JSON.stringify(migrated));
+        localStorage.removeItem('betterdash_server');
+        return migrated;
+      }
+    }
+    return newData ? JSON.parse(newData) : [];
+  } catch (_) { return []; }
+}
+
+function _saveServers(servers) {
+  try {
+    localStorage.setItem(BD_SERVERS_KEY, JSON.stringify(servers));
+  } catch (_) {}
+}
+
+function _generateServerId() {
+  return 'srv_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 5);
+}
+
 // ─── Main Card ────────────────────────────────────────────────────────────────
 
 class BetterDashCard extends HTMLElement {
@@ -762,11 +835,9 @@ class BetterDashCard extends HTMLElement {
   }
 
   setConfig(config) {
-    if (!config.server_url) {
-      throw new Error('Please configure a BetterDash server URL');
-    }
     this._config = {
       title: 'BetterDash',
+      server_id: '',
       server_url: '',
       api_key: '',
       columns: 3,
@@ -774,12 +845,17 @@ class BetterDashCard extends HTMLElement {
       show_categories: true,
       show_status: true,
       poll_interval: 30,
-      selected_items: [], // empty = show all
+      selected_items: [],
       open_in_new_tab: true,
       ...config,
     };
-    this._api = new BetterDashAPI(this._config.server_url, this._config.api_key);
-    this._fetchData();
+    if (this._config.server_url) {
+      this._api = new BetterDashAPI(this._config.server_url, this._config.api_key);
+      this._fetchData();
+    } else {
+      this._connectionState = 'disconnected';
+      this._render();
+    }
   }
 
   connectedCallback() {
@@ -1049,14 +1125,18 @@ class BetterDashCard extends HTMLElement {
   }
 
   static getStubConfig() {
+    const servers = _loadServers();
+    const first = servers[0];
     return {
       title: 'BetterDash',
-      server_url: 'http://192.168.1.100:3000',
+      server_id: first ? first.id : '',
+      server_url: first ? first.server_url : '',
+      api_key: first ? first.api_key : '',
       columns: 3,
       show_search: true,
       show_categories: true,
       show_status: true,
-      poll_interval: 30,
+      poll_interval: first ? first.poll_interval : 30,
       selected_items: [],
       open_in_new_tab: true,
     };
@@ -1071,8 +1151,9 @@ class BetterDashCardEditor extends HTMLElement {
     this.attachShadow({ mode: 'open' });
     this._config = {};
     this._hass = null;
+    this._servers = _loadServers();
     this._fetchedItems = [];
-    this._testState = ''; // '' | 'testing' | 'success' | 'error'
+    this._testState = '';
     this._testMsg = '';
     this._sectionState = { server: true, display: true, items: true };
   }
@@ -1082,10 +1163,10 @@ class BetterDashCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    // For new cards without a server_url, load saved server settings
-    const saved = (!config.server_url) ? this._loadServerSettings() : {};
+    this._servers = _loadServers();
     this._config = {
       title: 'BetterDash',
+      server_id: '',
       server_url: '',
       api_key: '',
       columns: 3,
@@ -1095,27 +1176,45 @@ class BetterDashCardEditor extends HTMLElement {
       poll_interval: 30,
       selected_items: [],
       open_in_new_tab: true,
-      ...saved,
       ...config,
     };
+    // If card has server_url but no server_id, find or create a matching registry entry
+    if (!this._config.server_id && this._config.server_url) {
+      const match = this._servers.find(s => s.server_url === this._config.server_url);
+      if (match) {
+        this._config.server_id = match.id;
+      } else {
+        const newEntry = {
+          id: _generateServerId(),
+          name: 'BetterDash Server',
+          server_url: this._config.server_url,
+          api_key: this._config.api_key || '',
+          poll_interval: this._config.poll_interval || 30,
+        };
+        this._servers.push(newEntry);
+        _saveServers(this._servers);
+        this._config.server_id = newEntry.id;
+      }
+    }
+    // If no server_id and servers exist, default to first
+    if (!this._config.server_id && this._servers.length > 0) {
+      this._applyServer(this._servers[0].id);
+      this._dispatch();
+    }
     this._render();
   }
 
-  _saveServerSettings() {
-    try {
-      localStorage.setItem('betterdash_server', JSON.stringify({
-        server_url: this._config.server_url,
-        api_key: this._config.api_key,
-        poll_interval: this._config.poll_interval,
-      }));
-    } catch (_) { /* storage unavailable */ }
-  }
-
-  _loadServerSettings() {
-    try {
-      const data = localStorage.getItem('betterdash_server');
-      return data ? JSON.parse(data) : {};
-    } catch (_) { return {}; }
+  _applyServer(serverId) {
+    const server = this._servers.find(s => s.id === serverId);
+    if (server) {
+      this._config = {
+        ...this._config,
+        server_id: server.id,
+        server_url: server.server_url,
+        api_key: server.api_key,
+        poll_interval: server.poll_interval || 30,
+      };
+    }
   }
 
   _dispatch() {
@@ -1128,8 +1227,69 @@ class BetterDashCardEditor extends HTMLElement {
 
   _updateConfig(key, value) {
     this._config = { ...this._config, [key]: value };
-    if (key === 'server_url' || key === 'api_key' || key === 'poll_interval') {
-      this._saveServerSettings();
+    // Sync server fields back to the registry entry
+    if (['server_url', 'api_key', 'poll_interval'].includes(key) && this._config.server_id) {
+      const idx = this._servers.findIndex(s => s.id === this._config.server_id);
+      if (idx >= 0) {
+        this._servers[idx][key] = value;
+        _saveServers(this._servers);
+      }
+    }
+    this._dispatch();
+    this._render();
+  }
+
+  _selectServer(serverId) {
+    if (!serverId) return;
+    this._applyServer(serverId);
+    this._fetchedItems = [];
+    this._config.selected_items = [];
+    this._testState = '';
+    this._testMsg = '';
+    this._dispatch();
+    this._render();
+    if (this._config.server_url) {
+      this._fetchItems();
+    }
+  }
+
+  _addServer() {
+    const newServer = {
+      id: _generateServerId(),
+      name: '',
+      server_url: '',
+      api_key: '',
+      poll_interval: 30,
+    };
+    this._servers.push(newServer);
+    _saveServers(this._servers);
+    this._config.server_id = newServer.id;
+    this._config.server_url = '';
+    this._config.api_key = '';
+    this._config.poll_interval = 30;
+    this._config.selected_items = [];
+    this._fetchedItems = [];
+    this._testState = '';
+    this._testMsg = '';
+    this._dispatch();
+    this._render();
+  }
+
+  _deleteServer() {
+    const id = this._config.server_id;
+    if (!id) return;
+    this._servers = this._servers.filter(s => s.id !== id);
+    _saveServers(this._servers);
+    this._fetchedItems = [];
+    this._config.selected_items = [];
+    this._testState = '';
+    this._testMsg = '';
+    if (this._servers.length > 0) {
+      this._applyServer(this._servers[0].id);
+    } else {
+      this._config.server_id = '';
+      this._config.server_url = '';
+      this._config.api_key = '';
     }
     this._dispatch();
     this._render();
@@ -1144,7 +1304,6 @@ class BetterDashCardEditor extends HTMLElement {
       await api.health();
       this._testState = 'success';
       this._testMsg = 'Connected successfully!';
-      this._saveServerSettings();
       this._render();
       await this._fetchItems();
       return;
@@ -1192,6 +1351,7 @@ class BetterDashCardEditor extends HTMLElement {
   _render() {
     const c = this._config;
     const selectedSet = new Set(c.selected_items || []);
+    const selectedServer = this._servers.find(s => s.id === c.server_id);
 
     this.shadowRoot.innerHTML = `
       <style>${EDITOR_STYLES}</style>
@@ -1204,27 +1364,42 @@ class BetterDashCardEditor extends HTMLElement {
           </div>
           <div class="editor-section-body ${this._sectionState.server ? '' : 'collapsed'}">
             <div class="field">
-              <label class="field-label">BetterDash Server URL</label>
-              <input type="url" id="server_url" value="${c.server_url || ''}" placeholder="http://192.168.1.100:3000">
-              <div class="field-hint">The URL of your BetterDash server instance</div>
-            </div>
-            <div class="field">
-              <label class="field-label">API Key (optional)</label>
-              <input type="password" id="api_key" value="${c.api_key || ''}" placeholder="Leave empty if not required">
-              <div class="field-hint">Authentication key if your BetterDash server requires one</div>
-            </div>
-            <div class="field">
-              <div class="field-row">
-                <div class="field">
-                  <label class="field-label">Poll Interval (seconds)</label>
-                  <input type="number" id="poll_interval" value="${c.poll_interval || 30}" min="10" max="3600">
-                </div>
-                <button class="test-btn ${this._testState}" id="test-btn">
-                  ${this._testState === 'testing' ? 'Testing...' : this._testState === 'success' ? '✓ Connected' : this._testState === 'error' ? '✗ Failed' : 'Test Connection'}
-                </button>
+              <label class="field-label">Server</label>
+              <div class="server-select-row">
+                <select id="server_select">
+                  ${this._servers.length === 0 ? '<option value="">No servers configured</option>' : ''}
+                  ${this._servers.map(s => `<option value="${s.id}" ${s.id === c.server_id ? 'selected' : ''}>${s.name || s.server_url || 'New Server'}</option>`).join('')}
+                </select>
+                <button class="icon-btn" id="add-server" title="Add server">+</button>
+                ${c.server_id ? '<button class="icon-btn danger" id="delete-server" title="Remove server">&times;</button>' : ''}
               </div>
-              ${this._testMsg ? `<div class="field-hint" style="color: ${this._testState === 'success' ? '#4caf50' : '#f44336'}">${this._testMsg}</div>` : ''}
             </div>
+            ${c.server_id ? `
+              <div class="field">
+                <label class="field-label">Server Name</label>
+                <input type="text" id="server_name" value="${selectedServer ? selectedServer.name || '' : ''}" placeholder="My BetterDash Server">
+              </div>
+              <div class="field">
+                <label class="field-label">BetterDash Server URL</label>
+                <input type="url" id="server_url" value="${c.server_url || ''}" placeholder="http://192.168.1.100:3000">
+              </div>
+              <div class="field">
+                <label class="field-label">API Key (optional)</label>
+                <input type="password" id="api_key" value="${c.api_key || ''}" placeholder="Leave empty if not required">
+              </div>
+              <div class="field">
+                <div class="field-row">
+                  <div class="field">
+                    <label class="field-label">Poll Interval (seconds)</label>
+                    <input type="number" id="poll_interval" value="${c.poll_interval || 30}" min="10" max="3600">
+                  </div>
+                  <button class="test-btn ${this._testState}" id="test-btn">
+                    ${this._testState === 'testing' ? 'Testing...' : this._testState === 'success' ? '✓ Connected' : this._testState === 'error' ? '✗ Failed' : 'Test Connection'}
+                  </button>
+                </div>
+                ${this._testMsg ? `<div class="field-hint" style="color: ${this._testState === 'success' ? '#4caf50' : '#f44336'}">${this._testMsg}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
         </div>
 
@@ -1320,7 +1495,7 @@ class BetterDashCardEditor extends HTMLElement {
             ` : `
               <div class="items-list">
                 <div class="items-list-empty">
-                  ${c.server_url ? 'No items fetched yet. Click below to load items from your BetterDash server.' : 'Configure a server URL first, then fetch items.'}
+                  ${c.server_url ? 'No items fetched yet. Use Test Connection above or click below to load items.' : 'Configure a server first, then fetch items.'}
                 </div>
               </div>
             `}
@@ -1339,12 +1514,23 @@ class BetterDashCardEditor extends HTMLElement {
       if (el) el.addEventListener(event, handler);
     };
 
+    bind('server_select', 'change', (e) => this._selectServer(e.target.value));
+    bind('add-server', 'click', () => this._addServer());
+    bind('delete-server', 'click', () => this._deleteServer());
+    bind('server_name', 'change', (e) => {
+      const idx = this._servers.findIndex(s => s.id === this._config.server_id);
+      if (idx >= 0) {
+        this._servers[idx].name = e.target.value;
+        _saveServers(this._servers);
+        this._render();
+      }
+    });
     bind('server_url', 'change', (e) => this._updateConfig('server_url', e.target.value.trim()));
     bind('api_key', 'change', (e) => this._updateConfig('api_key', e.target.value.trim()));
-    bind('title', 'change', (e) => this._updateConfig('title', e.target.value));
-    bind('columns', 'change', (e) => this._updateConfig('columns', parseInt(e.target.value)));
     bind('poll_interval', 'change', (e) => this._updateConfig('poll_interval', Math.max(10, parseInt(e.target.value) || 30)));
 
+    bind('title', 'change', (e) => this._updateConfig('title', e.target.value));
+    bind('columns', 'change', (e) => this._updateConfig('columns', parseInt(e.target.value)));
     bind('show_search', 'change', (e) => this._updateConfig('show_search', e.target.checked));
     bind('show_categories', 'change', (e) => this._updateConfig('show_categories', e.target.checked));
     bind('show_status', 'change', (e) => this._updateConfig('show_status', e.target.checked));
