@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BetterDash Card Preview</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0a1628;
+    color: #e0e0e0;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    padding: 30px;
+    min-height: 100vh;
+  }
+  h2 {
+    font-size: 0.85em;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: #4dd0e1;
+    margin: 30px 0 14px;
+    opacity: 0.7;
+  }
+  h2:first-of-type { margin-top: 0; }
+  .preview-row {
+    display: grid;
+    grid-template-columns: 1fr 420px;
+    gap: 24px;
+    align-items: start;
+  }
+  @media (max-width: 900px) {
+    .preview-row { grid-template-columns: 1fr; }
+  }
+  ha-card {
+    display: block;
+    background: rgba(15, 25, 50, 0.75);
+    border: 1px solid rgba(255,255,255,0.06);
+    border-radius: 16px;
+    overflow: hidden;
+    backdrop-filter: blur(12px);
+  }
+</style>
+</head>
+<body>
+
+<h2>Card Preview (with mock data)</h2>
+<div class="preview-row">
+  <div id="card-slot"></div>
+  <div>
+    <h2 style="margin-top: 0;">Config Editor Preview</h2>
+    <ha-card>
+      <div id="editor-slot"></div>
+    </ha-card>
+  </div>
+</div>
+
+<script>
+// ── Mock BetterDash API ──
+const MOCK_ITEMS = [
+  { id: 'proxmox', name: 'Proxmox VE', description: 'Main hypervisor', url: 'https://192.168.15.10:8006', category: 'Infrastructure', icon_slug: 'proxmox', tags: ['hypervisor', 'core'] },
+  { id: 'portainer', name: 'Portainer', description: 'Docker management', url: 'https://192.168.15.10:9443', category: 'Infrastructure', icon_slug: 'portainer', tags: ['docker'] },
+  { id: 'pfsense', name: 'pfSense', description: 'Firewall & router', url: 'https://192.168.15.1', category: 'Infrastructure', icon_slug: 'pfsense', tags: ['networking', 'core'] },
+  { id: 'grafana', name: 'Grafana', description: 'Metrics dashboards', url: 'http://192.168.15.10:3000', category: 'Monitoring', icon_slug: 'grafana', tags: ['monitoring'] },
+  { id: 'frigate', name: 'Frigate NVR', description: 'Camera recording & detection', url: 'http://192.168.15.10:5000', category: 'Security', icon_slug: 'frigate', tags: ['nvr', 'cameras'] },
+  { id: 'homeassistant', name: 'Home Assistant', description: 'Smart home hub', url: 'http://192.168.15.113:8123', category: 'Automation', icon_slug: 'home-assistant', tags: ['automation'] },
+  { id: 'omada', name: 'Omada Controller', description: 'Network management', url: 'https://192.168.15.10:8043', category: 'Infrastructure', icon_slug: 'omada', tags: ['networking', 'wifi'] },
+  { id: 'uptime-kuma', name: 'Uptime Kuma', description: 'Status monitoring', url: 'http://192.168.15.10:3001', category: 'Monitoring', icon_slug: 'uptime-kuma', tags: ['monitoring'] },
+  { id: 'nginx-proxy', name: 'Nginx Proxy Manager', description: 'Reverse proxy', url: 'http://192.168.15.10:81', category: 'Infrastructure', icon_slug: 'nginx-proxy-manager', tags: ['proxy'] },
+];
+
+const MOCK_STATUSES = [
+  { id: 'proxmox', status: 'online', latency_ms: 8 },
+  { id: 'portainer', status: 'online', latency_ms: 12 },
+  { id: 'pfsense', status: 'online', latency_ms: 3 },
+  { id: 'grafana', status: 'online', latency_ms: 15 },
+  { id: 'frigate', status: 'online', latency_ms: 22 },
+  { id: 'homeassistant', status: 'online', latency_ms: 5 },
+  { id: 'omada', status: 'online', latency_ms: 18 },
+  { id: 'uptime-kuma', status: 'offline', latency_ms: null },
+  { id: 'nginx-proxy', status: 'online', latency_ms: 6 },
+];
+
+// Override fetch for preview
+const _origFetch = window.fetch;
+window.fetch = async function(url, opts) {
+  const u = typeof url === 'string' ? url : url.toString();
+  if (u.includes('/api/health')) return new Response(JSON.stringify({ status: 'ok', version: '1.0.0' }));
+  if (u.includes('/api/items')) return new Response(JSON.stringify({ items: MOCK_ITEMS }));
+  if (u.includes('/api/status')) return new Response(JSON.stringify({ statuses: MOCK_STATUSES }));
+  if (u.includes('/api/categories')) return new Response(JSON.stringify({ categories: [
+    { name: 'Infrastructure', count: 4 },
+    { name: 'Monitoring', count: 2 },
+    { name: 'Security', count: 1 },
+    { name: 'Automation', count: 1 },
+  ]}));
+  return _origFetch.apply(this, arguments);
+};
+</script>
+
+<script src="dist/betterdash-card.js"></script>
+
+<script>
+// ── Create card instance ──
+const card = document.createElement('betterdash-card');
+card.setConfig({
+  title: 'BetterDash',
+  server_url: 'http://192.168.15.10:3000',
+  columns: 3,
+  show_search: true,
+  show_categories: true,
+  show_status: true,
+  poll_interval: 60,
+});
+document.getElementById('card-slot').appendChild(card);
+
+// ── Create editor instance ──
+const editor = document.createElement('betterdash-card-editor');
+editor._fetchedItems = MOCK_ITEMS;
+editor.setConfig({
+  title: 'BetterDash',
+  server_url: 'http://192.168.15.10:3000',
+  columns: 3,
+  show_search: true,
+  show_categories: true,
+  show_status: true,
+  poll_interval: 30,
+  selected_items: ['proxmox', 'portainer', 'pfsense', 'grafana', 'frigate'],
+});
+document.getElementById('editor-slot').appendChild(editor);
+</script>
+
+</body>
+</html>

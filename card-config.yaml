@@ -1,0 +1,34 @@
+# ─── Minimal Configuration ──────────────────────────────────────────────
+# Just connect to your BetterDash server and show everything
+type: custom:betterdash-card
+server_url: http://192.168.1.100:3000
+
+# ─── Full Configuration ─────────────────────────────────────────────────
+# All available options with defaults shown
+# type: custom:betterdash-card
+# title: BetterDash
+# server_url: http://192.168.1.100:3000
+# api_key: ""                     # Optional API key for auth
+# columns: 3                      # Grid columns (1-6)
+# show_search: true               # Show search/filter bar
+# show_categories: true           # Group items by category
+# show_status: true               # Show online/offline indicators
+# poll_interval: 30               # Refresh interval in seconds (min 10)
+# open_in_new_tab: true           # Open service links in new tab
+# selected_items: []              # Item IDs to show (empty = all)
+#   - proxmox
+#   - portainer
+#   - grafana
+#   - frigate
+
+# ─── Selective Items ────────────────────────────────────────────────────
+# Only show specific items from your BetterDash server
+# type: custom:betterdash-card
+# title: Core Infrastructure
+# server_url: http://192.168.1.100:3000
+# columns: 2
+# selected_items:
+#   - proxmox
+#   - pfsense
+#   - portainer
+#   - truenas
