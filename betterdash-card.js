@@ -1082,6 +1082,8 @@ class BetterDashCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
+    // For new cards without a server_url, load saved server settings
+    const saved = (!config.server_url) ? this._loadServerSettings() : {};
     this._config = {
       title: 'BetterDash',
       server_url: '',
@@ -1093,9 +1095,27 @@ class BetterDashCardEditor extends HTMLElement {
       poll_interval: 30,
       selected_items: [],
       open_in_new_tab: true,
+      ...saved,
       ...config,
     };
     this._render();
+  }
+
+  _saveServerSettings() {
+    try {
+      localStorage.setItem('betterdash_server', JSON.stringify({
+        server_url: this._config.server_url,
+        api_key: this._config.api_key,
+        poll_interval: this._config.poll_interval,
+      }));
+    } catch (_) { /* storage unavailable */ }
+  }
+
+  _loadServerSettings() {
+    try {
+      const data = localStorage.getItem('betterdash_server');
+      return data ? JSON.parse(data) : {};
+    } catch (_) { return {}; }
   }
 
   _dispatch() {
@@ -1108,6 +1128,9 @@ class BetterDashCardEditor extends HTMLElement {
 
   _updateConfig(key, value) {
     this._config = { ...this._config, [key]: value };
+    if (key === 'server_url' || key === 'api_key' || key === 'poll_interval') {
+      this._saveServerSettings();
+    }
     this._dispatch();
     this._render();
   }
@@ -1121,6 +1144,10 @@ class BetterDashCardEditor extends HTMLElement {
       await api.health();
       this._testState = 'success';
       this._testMsg = 'Connected successfully!';
+      this._saveServerSettings();
+      this._render();
+      await this._fetchItems();
+      return;
     } catch (err) {
       this._testState = 'error';
       this._testMsg = err.message || 'Connection failed';
