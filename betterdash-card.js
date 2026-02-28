@@ -1041,7 +1041,7 @@ class BetterDashCard extends HTMLElement {
 
     // Icon fallback: SVG → PNG → MDI
     this.shadowRoot.querySelectorAll('.bd-icon-img').forEach(img => {
-      img.addEventListener('error', function() {
+      const handleError = function() {
         const png = this.dataset.fallbackPng;
         if (png && this.src !== png) {
           this.src = png;
@@ -1053,7 +1053,9 @@ class BetterDashCard extends HTMLElement {
           span.style.color = 'var(--bd-primary)';
           this.replaceWith(span);
         }
-      });
+      };
+      img.addEventListener('error', handleError);
+      if (img.complete && img.naturalWidth === 0) handleError.call(img);
     });
   }
 
@@ -1579,7 +1581,7 @@ class BetterDashCardEditor extends HTMLElement {
 
     // Icon fallback: SVG → PNG → MDI
     this.shadowRoot.querySelectorAll('.editor-icon-img').forEach(img => {
-      img.addEventListener('error', function() {
+      const handleError = function() {
         const png = this.dataset.fallbackPng;
         if (png && this.src !== png) {
           this.src = png;
@@ -1591,7 +1593,9 @@ class BetterDashCardEditor extends HTMLElement {
           span.style.color = 'var(--bd-text-secondary)';
           this.replaceWith(span);
         }
-      });
+      };
+      img.addEventListener('error', handleError);
+      if (img.complete && img.naturalWidth === 0) handleError.call(img);
     });
   }
 }
