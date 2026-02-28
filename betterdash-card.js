@@ -957,8 +957,13 @@ class BetterDashCard extends HTMLElement {
   }
 
   _resolveIcon(item) {
-    if (item.icon_url) return `<img src="${item.icon_url}" alt="">`;
-    if (item.icon_slug) return `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="">`;
+    const mdi = item.icon || 'server';
+    if (item.icon_url) {
+      return `<img src="${item.icon_url}" alt="" class="bd-icon-img" data-fallback-mdi="${mdi}">`;
+    }
+    if (item.icon_slug) {
+      return `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="bd-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png" data-fallback-mdi="${mdi}">`;
+    }
     if (item.icon) return `<span class="mdi mdi-${item.icon}"></span>`;
     return `<span class="mdi mdi-server"></span>`;
   }
@@ -1033,6 +1038,23 @@ class BetterDashCard extends HTMLElement {
 
     const retryBtn = this.shadowRoot.querySelector('.bd-retry-btn');
     if (retryBtn) retryBtn.addEventListener('click', () => this._fetchData());
+
+    // Icon fallback: SVG → PNG → MDI
+    this.shadowRoot.querySelectorAll('.bd-icon-img').forEach(img => {
+      img.addEventListener('error', function() {
+        const png = this.dataset.fallbackPng;
+        if (png && this.src !== png) {
+          this.src = png;
+        } else {
+          const mdi = this.dataset.fallbackMdi || 'server';
+          const span = document.createElement('span');
+          span.className = `mdi mdi-${mdi}`;
+          span.style.fontSize = '20px';
+          span.style.color = 'var(--bd-primary)';
+          this.replaceWith(span);
+        }
+      });
+    });
   }
 
   _renderHeader() {
@@ -1355,6 +1377,7 @@ class BetterDashCardEditor extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>${EDITOR_STYLES}</style>
+      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
       <div class="editor">
 
         <!-- Server Connection -->
@@ -1479,11 +1502,14 @@ class BetterDashCardEditor extends HTMLElement {
                     <div class="item-check ${selectedSet.has(item.id) ? 'checked' : ''}" data-id="${item.id}">
                       ${SVG.check}
                     </div>
-                    ${item.icon_slug || item.icon_url ? `
-                      <div class="item-icon">
-                        <img src="${item.icon_url || `https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg`}" alt="">
-                      </div>
-                    ` : ''}
+                    <div class="item-icon">
+                      ${item.icon_url
+                        ? `<img src="${item.icon_url}" alt="" class="editor-icon-img" data-fallback-mdi="${item.icon || 'server'}">`
+                        : item.icon_slug
+                          ? `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="editor-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png" data-fallback-mdi="${item.icon || 'server'}">`
+                          : `<span class="mdi mdi-${item.icon || 'server'}" style="font-size:18px;color:var(--bd-text-secondary)"></span>`
+                      }
+                    </div>
                     <div class="item-info">
                       <div class="item-name">${item.name || item.id}</div>
                       ${item.url ? `<div class="item-url">${item.url}</div>` : ''}
@@ -1549,6 +1575,23 @@ class BetterDashCardEditor extends HTMLElement {
     // Item checkboxes
     this.shadowRoot.querySelectorAll('.item-check').forEach(el => {
       el.addEventListener('click', () => this._toggleItem(el.dataset.id));
+    });
+
+    // Icon fallback: SVG → PNG → MDI
+    this.shadowRoot.querySelectorAll('.editor-icon-img').forEach(img => {
+      img.addEventListener('error', function() {
+        const png = this.dataset.fallbackPng;
+        if (png && this.src !== png) {
+          this.src = png;
+        } else {
+          const mdi = this.dataset.fallbackMdi || 'server';
+          const span = document.createElement('span');
+          span.className = `mdi mdi-${mdi}`;
+          span.style.fontSize = '18px';
+          span.style.color = 'var(--bd-text-secondary)';
+          this.replaceWith(span);
+        }
+      });
     });
   }
 }
