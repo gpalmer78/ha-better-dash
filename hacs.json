@@ -2,5 +2,5 @@
   "name": "BetterDash Card",
   "render_readme": true,
   "filename": "betterdash-card.js",
-  "content_in_root": false
+  "content_in_root": true
 }

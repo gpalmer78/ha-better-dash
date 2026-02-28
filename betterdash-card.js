@@ -824,7 +824,6 @@ class BetterDashCard extends HTMLElement {
     this._statuses = {};
     this._connectionState = 'loading'; // 'connected' | 'disconnected' | 'loading'
     this._error = null;
-    this._searchTerm = '';
     this._collapsedCategories = new Set();
     this._pollTimer = null;
     this._api = null;
@@ -841,7 +840,6 @@ class BetterDashCard extends HTMLElement {
       server_url: '',
       api_key: '',
       columns: 3,
-      show_search: true,
       show_categories: true,
       show_status: true,
       poll_interval: 30,
@@ -924,17 +922,6 @@ class BetterDashCard extends HTMLElement {
     const selectedSet = new Set(this._config.selected_items);
     items = items.filter(i => selectedSet.has(i.id));
 
-    // Search filter
-    if (this._searchTerm) {
-      const term = this._searchTerm.toLowerCase();
-      items = items.filter(i =>
-        (i.name || '').toLowerCase().includes(term) ||
-        (i.description || '').toLowerCase().includes(term) ||
-        (i.category || '').toLowerCase().includes(term) ||
-        (i.url || '').toLowerCase().includes(term)
-      );
-    }
-
     return items;
   }
 
@@ -957,15 +944,13 @@ class BetterDashCard extends HTMLElement {
   }
 
   _resolveIcon(item) {
-    const mdi = item.icon || 'server';
     if (item.icon_url) {
-      return `<img src="${item.icon_url}" alt="" class="bd-icon-img" data-fallback-mdi="${mdi}">`;
+      return `<img src="${item.icon_url}" alt="" class="bd-icon-img">`;
     }
     if (item.icon_slug) {
-      return `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="bd-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png" data-fallback-mdi="${mdi}">`;
+      return `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="bd-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png">`;
     }
-    if (item.icon) return `<span class="mdi mdi-${item.icon}"></span>`;
-    return `<span class="mdi mdi-server"></span>`;
+    return SVG.server;
   }
 
   _handleServiceClick(item) {
@@ -993,14 +978,11 @@ class BetterDashCard extends HTMLElement {
             : this._error && this._items.length === 0
               ? this._renderError()
               : `
-                ${this._config.show_search ? this._renderSearch() : ''}
-                ${items.length === 0 && this._searchTerm
-                  ? `<div class="bd-empty">No items match "${this._searchTerm}"</div>`
-                  : items.length === 0
-                    ? `<div class="bd-empty">${SVG.server}<div>No items selected. Open card settings to choose items to display.</div></div>`
-                    : this._config.show_categories
-                      ? Object.entries(grouped).map(([cat, catItems]) => this._renderCategory(cat, catItems)).join('')
-                      : `<div class="bd-grid" style="--bd-columns:${this._config.columns}">${items.map(i => this._renderServiceCard(i)).join('')}</div>`
+                ${items.length === 0
+                  ? `<div class="bd-empty">${SVG.server}<div>No items selected. Open card settings to choose items to display.</div></div>`
+                  : this._config.show_categories
+                    ? Object.entries(grouped).map(([cat, catItems]) => this._renderCategory(cat, catItems)).join('')
+                    : `<div class="bd-grid" style="--bd-columns:${this._config.columns}">${items.map(i => this._renderServiceCard(i)).join('')}</div>`
                 }
               `
           }
@@ -1014,15 +996,6 @@ class BetterDashCard extends HTMLElement {
       const item = this._items.find(i => i.id === id);
       if (item) el.addEventListener('click', () => this._handleServiceClick(item));
     });
-
-    const searchInput = this.shadowRoot.querySelector('.bd-search-input');
-    if (searchInput) {
-      searchInput.value = this._searchTerm;
-      searchInput.addEventListener('input', (e) => {
-        this._searchTerm = e.target.value;
-        this._render();
-      });
-    }
 
     this.shadowRoot.querySelectorAll('.bd-category-header').forEach(el => {
       el.addEventListener('click', () => {
@@ -1039,19 +1012,14 @@ class BetterDashCard extends HTMLElement {
     const retryBtn = this.shadowRoot.querySelector('.bd-retry-btn');
     if (retryBtn) retryBtn.addEventListener('click', () => this._fetchData());
 
-    // Icon fallback: SVG → PNG → MDI
+    // Icon fallback: SVG → PNG → default SVG icon
     this.shadowRoot.querySelectorAll('.bd-icon-img').forEach(img => {
       const handleError = function() {
         const png = this.dataset.fallbackPng;
         if (png && this.src !== png) {
           this.src = png;
         } else {
-          const mdi = this.dataset.fallbackMdi || 'server';
-          const span = document.createElement('span');
-          span.className = `mdi mdi-${mdi}`;
-          span.style.fontSize = '20px';
-          span.style.color = 'var(--bd-primary)';
-          this.replaceWith(span);
+          this.parentElement.innerHTML = `<svg viewBox="0 0 24 24" fill="var(--bd-primary)" width="24" height="24"><path d="M4 1h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2V3a2 2 0 012-2m0 14h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m2-8a1 1 0 100-2 1 1 0 000 2m0 14a1 1 0 100-2 1 1 0 000 2"/></svg>`;
         }
       };
       img.addEventListener('error', handleError);
@@ -1069,17 +1037,6 @@ class BetterDashCard extends HTMLElement {
         <div class="bd-connection-badge ${this._connectionState}">
           <span class="bd-status-dot"></span>
           ${this._connectionState === 'connected' ? 'Connected' : this._connectionState === 'loading' ? 'Connecting...' : 'Disconnected'}
-        </div>
-      </div>
-    `;
-  }
-
-  _renderSearch() {
-    return `
-      <div class="bd-search">
-        <div class="bd-search-wrap">
-          <span class="bd-search-icon">${SVG.search}</span>
-          <input type="text" class="bd-search-input" placeholder="Search services...">
         </div>
       </div>
     `;
@@ -1157,7 +1114,7 @@ class BetterDashCard extends HTMLElement {
       server_url: first ? first.server_url : '',
       api_key: first ? first.api_key : '',
       columns: 3,
-      show_search: true,
+
       show_categories: true,
       show_status: true,
       poll_interval: first ? first.poll_interval : 30,
@@ -1194,7 +1151,7 @@ class BetterDashCardEditor extends HTMLElement {
       server_url: '',
       api_key: '',
       columns: 3,
-      show_search: true,
+
       show_categories: true,
       show_status: true,
       poll_interval: 30,
@@ -1379,7 +1336,6 @@ class BetterDashCardEditor extends HTMLElement {
 
     this.shadowRoot.innerHTML = `
       <style>${EDITOR_STYLES}</style>
-      <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css">
       <div class="editor">
 
         <!-- Server Connection -->
@@ -1446,14 +1402,6 @@ class BetterDashCardEditor extends HTMLElement {
             </div>
             <div class="field">
               <div class="toggle-row">
-                <span class="toggle-label">Show Search Bar</span>
-                <label class="toggle-switch">
-                  <input type="checkbox" id="show_search" ${c.show_search ? 'checked' : ''}>
-                  <span class="toggle-track"></span>
-                  <span class="toggle-thumb"></span>
-                </label>
-              </div>
-              <div class="toggle-row">
                 <span class="toggle-label">Group by Category</span>
                 <label class="toggle-switch">
                   <input type="checkbox" id="show_categories" ${c.show_categories ? 'checked' : ''}>
@@ -1506,10 +1454,10 @@ class BetterDashCardEditor extends HTMLElement {
                     </div>
                     <div class="item-icon">
                       ${item.icon_url
-                        ? `<img src="${item.icon_url}" alt="" class="editor-icon-img" data-fallback-mdi="${item.icon || 'server'}">`
+                        ? `<img src="${item.icon_url}" alt="" class="editor-icon-img">`
                         : item.icon_slug
-                          ? `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="editor-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png" data-fallback-mdi="${item.icon || 'server'}">`
-                          : `<span class="mdi mdi-${item.icon || 'server'}" style="font-size:18px;color:var(--bd-text-secondary)"></span>`
+                          ? `<img src="https://cdn.jsdelivr.net/gh/selfhst/icons/svg/${item.icon_slug}.svg" alt="" class="editor-icon-img" data-fallback-png="https://cdn.jsdelivr.net/gh/selfhst/icons/png/${item.icon_slug}.png">`
+                          : `<svg viewBox="0 0 24 24" fill="var(--bd-text-secondary)" width="18" height="18"><path d="M4 1h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2V3a2 2 0 012-2m0 14h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m2-8a1 1 0 100-2 1 1 0 000 2m0 14a1 1 0 100-2 1 1 0 000 2"/></svg>`
                       }
                     </div>
                     <div class="item-info">
@@ -1559,7 +1507,6 @@ class BetterDashCardEditor extends HTMLElement {
 
     bind('title', 'change', (e) => this._updateConfig('title', e.target.value));
     bind('columns', 'change', (e) => this._updateConfig('columns', parseInt(e.target.value)));
-    bind('show_search', 'change', (e) => this._updateConfig('show_search', e.target.checked));
     bind('show_categories', 'change', (e) => this._updateConfig('show_categories', e.target.checked));
     bind('show_status', 'change', (e) => this._updateConfig('show_status', e.target.checked));
     bind('open_in_new_tab', 'change', (e) => this._updateConfig('open_in_new_tab', e.target.checked));
@@ -1579,19 +1526,14 @@ class BetterDashCardEditor extends HTMLElement {
       el.addEventListener('click', () => this._toggleItem(el.dataset.id));
     });
 
-    // Icon fallback: SVG → PNG → MDI
+    // Icon fallback: SVG → PNG → default SVG icon
     this.shadowRoot.querySelectorAll('.editor-icon-img').forEach(img => {
       const handleError = function() {
         const png = this.dataset.fallbackPng;
         if (png && this.src !== png) {
           this.src = png;
         } else {
-          const mdi = this.dataset.fallbackMdi || 'server';
-          const span = document.createElement('span');
-          span.className = `mdi mdi-${mdi}`;
-          span.style.fontSize = '18px';
-          span.style.color = 'var(--bd-text-secondary)';
-          this.replaceWith(span);
+          this.parentElement.innerHTML = `<svg viewBox="0 0 24 24" fill="var(--bd-text-secondary)" width="18" height="18"><path d="M4 1h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2V3a2 2 0 012-2m0 14h16a2 2 0 012 2v4a2 2 0 01-2 2H4a2 2 0 01-2-2v-4a2 2 0 012-2m2-8a1 1 0 100-2 1 1 0 000 2m0 14a1 1 0 100-2 1 1 0 000 2"/></svg>`;
         }
       };
       img.addEventListener('error', handleError);
