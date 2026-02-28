@@ -841,11 +841,12 @@ class BetterDashCard extends HTMLElement {
   _getFilteredItems() {
     let items = [...this._items];
 
-    // Filter to selected items if configured
-    if (this._config.selected_items && this._config.selected_items.length > 0) {
-      const selectedSet = new Set(this._config.selected_items);
-      items = items.filter(i => selectedSet.has(i.id));
+    // Only show items the user has explicitly selected
+    if (!this._config.selected_items || this._config.selected_items.length === 0) {
+      return [];
     }
+    const selectedSet = new Set(this._config.selected_items);
+    items = items.filter(i => selectedSet.has(i.id));
 
     // Search filter
     if (this._searchTerm) {
@@ -915,7 +916,7 @@ class BetterDashCard extends HTMLElement {
                 ${items.length === 0 && this._searchTerm
                   ? `<div class="bd-empty">No items match "${this._searchTerm}"</div>`
                   : items.length === 0
-                    ? `<div class="bd-empty">${SVG.server}<div>No items found on BetterDash server</div></div>`
+                    ? `<div class="bd-empty">${SVG.server}<div>No items selected. Open card settings to choose items to display.</div></div>`
                     : this._config.show_categories
                       ? Object.entries(grouped).map(([cat, catItems]) => this._renderCategory(cat, catItems)).join('')
                       : `<div class="bd-grid" style="--bd-columns:${this._config.columns}">${items.map(i => this._renderServiceCard(i)).join('')}</div>`
@@ -1260,7 +1261,7 @@ class BetterDashCardEditor extends HTMLElement {
           </div>
           <div class="editor-section-body ${this._sectionState.items ? '' : 'collapsed'}">
             <div class="field-hint" style="margin-bottom: 10px;">
-              Select which items from your BetterDash server to display. Leave all unchecked to show everything.
+              Select which items from your BetterDash server to display. Only checked items will be shown.
             </div>
             ${this._fetchedItems.length > 0 ? `
               <div class="items-list">
