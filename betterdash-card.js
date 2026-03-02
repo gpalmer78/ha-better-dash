@@ -8,7 +8,7 @@
  * License: MIT
  */
 
-const BETTERDASH_VERSION = '1.0.0';
+const BETTERDASH_VERSION = '1.0.1';
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const CARD_STYLES = `
@@ -239,13 +239,24 @@ const CARD_STYLES = `
     overflow: hidden;
     text-overflow: ellipsis;
   }
+  .bd-service-desc-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 2px;
+  }
   .bd-service-desc {
     font-size: 0.72em;
     color: var(--bd-text-secondary);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    margin-top: 2px;
+    flex: 1;
+    min-width: 0;
+  }
+  .bd-service-desc-row .bd-service-meta {
+    margin-top: 0;
+    flex-shrink: 0;
   }
   .bd-service-status {
     width: 8px;
@@ -269,8 +280,7 @@ const CARD_STYLES = `
   .bd-service-meta {
     display: flex;
     align-items: center;
-    gap: 8px;
-    margin-top: 8px;
+    gap: 6px;
     flex-wrap: wrap;
   }
   .bd-service-tag {
@@ -281,6 +291,25 @@ const CARD_STYLES = `
     color: var(--bd-text-secondary);
     text-transform: uppercase;
     letter-spacing: 0.3px;
+  }
+
+  /* ── Single Column Compact ── */
+  .bd-single-col .bd-service {
+    padding: 8px 12px;
+  }
+  .bd-single-col .bd-service-top {
+    align-items: center;
+    margin-bottom: 0;
+  }
+  .bd-single-col .bd-service-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
+  }
+  .bd-single-col .bd-service-icon img,
+  .bd-single-col .bd-service-icon svg {
+    width: 18px;
+    height: 18px;
   }
 
   /* ── Loading / Error ── */
@@ -982,7 +1011,7 @@ class BetterDashCard extends HTMLElement {
                   ? `<div class="bd-empty">${SVG.server}<div>No items selected. Open card settings to choose items to display.</div></div>`
                   : this._config.show_categories
                     ? Object.entries(grouped).map(([cat, catItems]) => this._renderCategory(cat, catItems)).join('')
-                    : `<div class="bd-grid" style="--bd-columns:${this._config.columns}">${items.map(i => this._renderServiceCard(i)).join('')}</div>`
+                    : `<div class="bd-grid ${this._config.columns == 1 ? 'bd-single-col' : ''}" style="--bd-columns:${this._config.columns}">${items.map(i => this._renderServiceCard(i)).join('')}</div>`
                 }
               `
           }
@@ -1053,7 +1082,7 @@ class BetterDashCard extends HTMLElement {
           <span class="bd-category-count">${items.length}</span>
         </div>
         ${!isCollapsed ? `
-          <div class="bd-grid" style="--bd-columns:${this._config.columns}">
+          <div class="bd-grid ${this._config.columns == 1 ? 'bd-single-col' : ''}" style="--bd-columns:${this._config.columns}">
             ${items.map((item, i) => this._renderServiceCard(item, i)).join('')}
           </div>
         ` : ''}
@@ -1063,21 +1092,22 @@ class BetterDashCard extends HTMLElement {
 
   _renderServiceCard(item, index = 0) {
     const statusClass = this._config.show_status ? this._getStatusClass(item) : '';
+    const hasMeta = item.tags && item.tags.length;
     return `
       <div class="bd-service bd-animate-in" data-id="${item.id}" style="animation-delay:${index * 0.04}s">
         <div class="bd-service-top">
           <div class="bd-service-icon">${this._resolveIcon(item)}</div>
           <div class="bd-service-info">
             <div class="bd-service-name">${item.name || 'Unnamed'}</div>
-            ${item.description ? `<div class="bd-service-desc">${item.description}</div>` : ''}
+            ${item.description || hasMeta ? `
+              <div class="bd-service-desc-row">
+                ${item.description ? `<div class="bd-service-desc">${item.description}</div>` : '<div class="bd-service-desc"></div>'}
+                ${hasMeta ? `<div class="bd-service-meta">${item.tags.map(t => `<span class="bd-service-tag">${t}</span>`).join('')}</div>` : ''}
+              </div>
+            ` : ''}
           </div>
           ${this._config.show_status ? `<div class="bd-service-status ${statusClass}"></div>` : ''}
         </div>
-        ${item.tags && item.tags.length ? `
-          <div class="bd-service-meta">
-            ${item.tags.map(t => `<span class="bd-service-tag">${t}</span>`).join('')}
-          </div>
-        ` : ''}
       </div>
     `;
   }
